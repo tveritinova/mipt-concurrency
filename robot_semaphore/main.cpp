@@ -1,4 +1,4 @@
-#include "robot_semaphore.h"
+#include "robot_cv.h"
 #include <thread>
 #include <iostream>
 
@@ -14,8 +14,8 @@ void step_right(int step)
 
 int main()
 {
-    robot_semaphore sem1;
-    robot_semaphore sem2;
+    robot_cv sem1;
+    robot_cv sem2;
     
     // поток,отвечающий за шаги влево
     // после шага сигналим о том, что поток, который отвечает за шаги вправо, должен проснуться, а поток, отвечающий за лево засыпает
