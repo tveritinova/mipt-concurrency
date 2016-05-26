@@ -2,13 +2,85 @@
 #define thread_pool_h
 
 
+#include <mutex>
+#include <deque>
+#include <queue>
+#include <condition_variable>
+#include <exception>
+#include <utility>
+
+//Блокирующая очередь ограниченного размера
+template <typename T, class Container = std::deque<T>>
+class thread_safe_queue
+{
+    Container queue;
+    std::mutex queue_mtx; // мьютекс, который захватывается потоком, при pop и enqueue
+    std::condition_variable not_empty; //условные переменные
+    std::condition_variable not_full;
+    std::size_t queue_capacity;
+    bool isShutdown;
+    
+public:
+    
+    explicit thread_safe_queue(std::size_t capacity = 10) : queue_capacity(capacity), isShutdown(false) {}
+    thread_safe_queue(thread_safe_queue<T> &) = delete; // запрещённый конструктор копирования
+    void enqueue( T && item); // добавляет item в очередь,но если она уже заполнена(она ограничена), поток ждет
+    bool pop(T & item); //удаляет элемент из очереди , сохраняя его в item. Если очередь пуста, то поток ждет
+    void shutdown();
+};
+
+template <typename T, class Container>
+inline void thread_safe_queue<T, Container>::enqueue(T && item)
+{
+    std::unique_lock<std::mutex> lock(queue_mtx);
+    if (queue.size() == queue_capacity && !isShutdown)
+    {
+        not_full.wait(lock, [this]() { return queue.size() != queue_capacity; });
+        
+    }
+    if (isShutdown)
+    {
+        throw std::exception();
+    }
+    queue.push_back(std::move(item));
+    not_empty.notify_one();
+}
+
+template <typename T, class Container>
+inline bool thread_safe_queue<T, Container>::pop(T & item)
+{
+    std::unique_lock<std::mutex> lock(queue_mtx);
+    while (queue.empty() && !isShutdown)
+    {
+        not_empty.wait(lock, [this]() { return !queue.empty(); });
+    }
+    if (isShutdown)
+    {
+        return false;
+    }
+    item = std::move(queue.front());
+    queue.pop_front();
+    not_full.notify_one();
+    return true;
+}
+
+template <typename T, class Container>
+inline void thread_safe_queue<T, Container>::shutdown()
+{
+    std::unique_lock<std::mutex> lock(queue_mtx);
+    isShutdown = true;
+    not_empty.notify_all();		
+}
+
+
+
 #include <functional>
 #include <future>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include "thread_safe_queue.h"
+//#include "thread_safe_queue.h"
 
 template <class Value>
 class thread_pool
@@ -77,7 +149,14 @@ void thread_pool<Value>::run_workers()
         {
             break;
         }
-        task.second.set_value(task.first());
+        try
+        {
+            task.second.set_value(task.first());
+        }
+        catch (std::exception&)
+        {
+            task.second.set_exception(std::current_exception());
+        }
     }
 }
 
