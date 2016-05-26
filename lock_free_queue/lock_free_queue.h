@@ -1,11 +1,3 @@
-//
-//  lock_free_queue.h
-//  lock_free_queue
-//
-//  Created by Евгения Тверитинова on 25.05.16.
-//  Copyright © 2016 Евгения Тверитинова. All rights reserved.
-//
-
 #ifndef lock_free_queue_h
 #define lock_free_queue_h
 
